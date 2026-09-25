@@ -1,0 +1,590 @@
+# Bulk — continuous matter as a holder attribute
+
+The substrate for **continuous, formless, measured matter** (liquid in
+v1) — the **`Bulkable`** holder attribute: water, coffee. Bulk is the sibling of the discrete fungible-stack
+substrate (stacks.md), built on a fundamentally different
+premise — **bulk is not a Stuff.**
+
+A discrete glob (30 coins) is one Stuff with a `quantity`. Bulk (0.3 L
+of coffee) has no containment node and no Stuff identity at all: it is a
+`{ material, amount }` **attribute of its holder** — a thermos, a mug,
+the floor. Matter moves between holders through one primitive,
+`BulkableApi.transfer`; every bulk verb is a thin direction over it.
+
+Design of record: bulkable-slate.md (the
+holds-as-attribute reframe, the per-affordance model, the deferred
+tails). This doc is the operational reference for what shipped — the
+thermos slice.
+
+## `Sack` — a graded bulk holder for dry goods (the grain chain)
+
+`VesselKindMixin(DetailedMixin(GradedReceptacle))`. Four things and where
+each comes from: **bulk** (`BulkableMixin`), **a grade and a maker's
+mark** (`CraftedMixin`), **a kind** (so an empty one says *"an empty
+flour sack"* rather than reciting its description — the defect the
+shipped malt sack still has), and **a temperature**.
+
+⭐ **The grade rides the HOLDER, never the payload.** Bulk matter has no
+identity to be graded; a quantity of it in a marked sack does. Same
+convention a bottle of graded gin follows.
+
+⭐ `GradedReceptacle` gained `ThermalMixin` (outer of Bulkable, the
+`Receptacle` rule) in the same build — which reaches **every `Bottle`**.
+That is the point rather than a side effect: a bottled ale's freshness
+gauge had been reading a default holder temperature, so a cellar and a
+hearth kept identically. A corked bottle also picks up the `vacuum`
+barrier and its hours-long τ, which is the Flask rule and correct.
+
+⚠ Granular bulk still does not exist — `requiredClosureFor` answers
+`liquidTight` for everything, and a sack of flour is nominal litres. See
+the deferred tail.
+
+## ⭐⭐ Composition flows THROUGH a blend
+
+`BulkPayload.composition` is a `BlendPart[]` — what went in, by Material
+path and servings. Until the grain chain, `derivePayload` made **one part
+per consumed input MATERIAL**, so an input that was *itself* a blend
+contributed its blend identity and its own parts were lost.
+
+That is a hole in the middle of any chain more than two steps long.
+Flour whose payload says *72 % endosperm, 28 % bran* became, at a
+kneading trough, simply "flour" — and the loaf out the far end was white
+however dark the flour was, silently, with nothing anywhere to say so.
+
+The rule is now **macros in = macros out, applied to what the input was
+actually made of**: a consumed input carrying a composition expands into
+its parts, scaled by the fraction consumed. A parts-less input behaves
+exactly as before (one part, its own material) — pinned by a test,
+because every cocktail shipped before this build depends on it.
+
+⚠ The visible consequence: a blend built from a blend reads its inner
+ingredients rather than the intermediate's name. A cocktail from a
+pressed juice now lists the fruit. More honest, and a real change.
+
+**Five links carry a composition end to end, and every one fails closed
+and silent:**
+
+| # | link | where |
+|---|---|---|
+| 1 | the working stamps the product payload | `ComminutingMixin.planComminution` |
+| 2 | a pour banks the source's parts | `BuildContribution.composition` |
+| 3 | `derivePayload` expands a consumed input's parts | `CraftingLogic` |
+| 4 | a product swap keeps the payload | `Bulkable.setBulkMaterial` |
+| 5 | a tangible mint writes the merged parts | `ComposedMixin` on `Provision` |
+
+`ComposedMixin` is link 5's home: **every food can be made of parts** — a
+loaf, a sausage, a cutlet in batter — so it composes on `Provision`, and
+an empty list costs nothing. `EatController` carries it to the mouth and
+`NutritionLabel` reads it, or the chain would evaporate at the last inch.
+
+
+## ⭐ `category` — the vessel kind, and the tie between an empty and a product
+
+A vessel declares **what kind it is**: `coupe`, `can`, `keg`, `sack`,
+`spirit-bottle`. It is a property of the vessel, independent of what is
+in it — a coupe is a coupe whether it holds a martini or nothing.
+
+⚠ **It lives on `VesselKindMixin` (`lib/bulk/VesselKind.ts`), NOT on
+`BulkableMixin`.** It rode the volume mixin until the bulk decomposition,
+which handed a par key to every floor puddle, garden bed, plant pot, air
+tank and watering can in the game. It is composed by the classes that
+actually have a kind — `Bottle`, `Vat`, `CraftVessel` and everything
+below them — and `MixinApi.isVesselKind` is how a reader asks.
+
+It exists because **template inheritance does not exist**, so the empty
+vessel row (`/trade/bottling/thing/can`) and the product row that is
+that vessel filled (`…/can-of-cola`) are otherwise strangers that happen
+to share a class. The shared `category` string *is* the relationship,
+and three things read it:
+
+- **The census** ([residency.md](./residency.md)) — an emptied vessel
+  counts under `vessel:<category>`, so a drained can of cola joins the
+  factory-fresh empties instead of hiding under `vessel:cola`. That is
+  the count a deposit or returns market reads, and it is why draining
+  the world's gin makes the floor genuinely short.
+- **The pool** ([crafting.md](./crafting.md)) — `claimGlass` takes any
+  clean empty of the right kind. A washed-out vessel and a new one are
+  the same input to a fill, which is what a real line does.
+- **The par sheet** ([employment.md](./employment.md)) — glassware and
+  kegs are counted by kind, not by product.
+
+Authored on **both** the vessel row and every product row over it. A
+holder that declares none falls back to its primary keyword, which is
+right for a fixture whose interior is permanent (a plant pot's soil).
+
+### ⚠ OPEN — the word "vessel" is squatted by the enterable class
+
+The vocabulary this section defines is called the **vessel kind**
+everywhere (`outputVesselKind`, the `vessel:` census prefix, the
+archetype `vesselKind` need) — but the bare class name `Vessel` is the
+ENTERABLE container (a boat, a wagon; conveyance-domain), which is
+arguably the squatter on the word. A nothing-is-legacy rename of that
+class (to something conveyance-flavored) would free the term; parked
+here so it isn't lost (surfaced in the fermentation MR review).
+
+### ✅ RESOLVED — `category` now has a home a `Crate` can reach
+
+> Was: *"`category` lives on `BulkableMixin`, so only bulk holders carry
+> it. `Crate` is a `Container` and not `Bulkable`, so authoring
+> `category: crate` would be silently discarded."*
+
+⭐ The bulk decomposition moved the kind onto its own
+**`VesselKindMixin`**, which depends on nothing. A `Crate` can compose it
+and author `category: crate` whenever the census wants that convergence —
+the blocker was never the crate, it was the kind living on the volume.
+The rest of this section stands as the reason to bother.
+
+The consequence is narrow but real: an emptied crate derives
+`vessel:<primaryKeyword>` (`vessel:grapefruits`), so **empties do not
+converge across a Container holder's kinds** the way empty cans converge
+on `vessel:can`. Convergence is the whole point of the vessel kind — a
+produce crate is a returnable transport item exactly as a can is one — so
+this wants fixing before anything counts or trades `vessel:*`. Nothing
+does today, which is why it is deferred rather than urgent.
+
+⚠ **`DetailedMixin` is NOT the home** (ruled out 2026-08-30). Detailed is
+about descriptions and detail keys; the vessel kind is a structural fact
+about the holder, and parking it there because the three classes happen
+to share it would be an accident of composition, not a design.
+
+The real candidates, for whoever picks this up:
+- **A small dedicated mixin** composed by `Bottle`, `CraftVessel` and
+  `Crate`. A mixin for one field is heavy, but the field *is* the
+  concept, which is the bar this codebase sets.
+- **Reconsider whether the pool-claim needs `category` on non-Circulating
+  vessels at all.** `CirculatingMixin` already owns `censusKey`,
+  `isEmptyHolder()` and `holderKind()` — it would be the natural home
+  except that a bar's glasses (`CraftVessel`) are not Circulating. If
+  they should be, the field has a home already and this dissolves.
+
+Whichever way: it ripples through the pool-claim (`claimGlass`) and the
+par sheet (`stockSheetFor`), so it is a change, not a row edit.
+
+## The model
+
+### `BulkableMixin` (`lib/bulk/Bulkable.ts`)
+
+A host composes `BulkableMixin` to carry up to two **bulk slots**, one
+per affordance, each gated by an authored boolean flag:
+
+| Affordance | Flag (`data:`) | Meaning | Example |
+|---|---|---|---|
+| `interior` | `interiorBulk: true` | a vessel holds liquid | thermos, mug, urn |
+| `surface` | `surfaceBulk: true` | liquid pools on a surface | the floor's puddle |
+
+The two affordances are **independent of the spatial mixins**:
+interior-bulk does not require `Container` (a fluid-only thermos holds
+no pens), and surface-bulk does not require `Surfaced` (the floor
+carries a puddle without being a discrete-resting surface). Composition
+is explicit per host — the auto-compose-on-every-Container question is
+deferred.
+
+A slot's persistent state (flat fields, per affordance):
+
+- `interiorMaterial` / `surfaceMaterial` — the contained Material's
+  templatePath (an identity ref; resolved on read, HMR-safe), `null` ⇒ empty.
+- `interiorAmount` / `surfaceAmount` — `Quantity<'L'>`, marshalled via
+  `QuantityMarshaller.pathFor('L')`. Defaults `0 L`.
+- `interiorCapacity` / `surfaceCapacity` — `Quantity<'L'> | null`;
+  `null` is an **uncapped** slot (a puddle). Authored only when bounded
+  (omit ⇒ uncapped — the persistence layer skips absent fields).
+- `closure` — the retention scale (below). Default `liquidTight`.
+
+An **inexhaustible** source (a slot you can draw from forever that never
+depletes — the coffee urn) is NOT a flag on the base substrate. It is a
+focused capability mixin, `UnboundedSourceMixin` (`lib/bulk/UnboundedSource.ts`),
+composed only on source fixtures (`obj/UnboundedReceptacle`). It
+overrides three generic slot-policy seams the base exposes —
+`getBulkAvailable` (→ `∞`), `isBulkEmpty` (→ false while filled), and
+`debitBulk` (→ no-op) — so the base `Bulkable` interface carries nothing
+source-specific. The richer regenerating-well model (scheduled refill
+over game-time) is deferred; `∞` is the simpler demonstration.
+
+Canonical storage unit is **`L`** ({@link BULK_VOLUME_UNIT}). Authored
+or player-typed `cup` / `mL` measures convert to litres at the boundary
+(`Quantity.parse` / `Quantity.to`); the converters live in
+`lib/quantity.ts`. `cup` / `mL` are tagless volume units (like `m³`).
+
+### Authoring — discrete `Thing` vs `bulk`
+
+A content-author choice, not an engine one — the engine supports both:
+**discrete `Stuff`** when a unit has shape and identity and players
+treat it as countable (a loaf, an apple, a wheel of cheese, a coin;
+fungible + countable → also `Stackable`); **`bulk`** when it is a
+formless measured amount that conforms to its holder (water, flour,
+sand, oil). The linguistic tell: *three Xs* (discrete) vs *some X* /
+*200 g of X* (bulk). The same substance can be both (a wheel of cheese
+and grated cheese); the shipped crossing is § `Container` + `Bulkable`'s
+melt/solidify, and the conversion verbs are the slate's. Source:
+`bulkable-slate` § Authoring guidance.
+
+### `BulkSlot` — the live handle
+
+`host.getBulk(affordance?)` returns a `BulkSlot` handle that reads and
+writes the host's flat fields. With no argument it returns the single
+present slot and throws when the holder has both or neither. The handle
+is what `BulkableApi.transfer` operates on (and accepts `null` for the
+discard sink — `drink`):
+
+- `available()` — litres to draw FROM (`∞` for an inexhaustible
+  source — see `UnboundedSourceMixin`).
+- `remaining()` — litres of headroom to pour INTO (`∞` when uncapped).
+- `isEmpty()` — no material, or non-positive amount (an unbounded
+  source with a material is never empty).
+- `getMaterial()` / `getAmount()` / `getCapacity()` / `getClosure()`.
+- `setMaterial()` / `setAmount()` — the low-level primitives `transfer`
+  composes (the bulk analog of `Stackable.setQuantity`).
+
+### Closure scale — gated retention
+
+A per-vessel ordered `closure` level governs liquid retention. It is the
+vessel's inherent **construction** (a steel bucket vs a steel sieve), so
+it can't derive from material; it lives on the `Bulkable` holder, **not**
+on `Sealable` (which is a dynamic lid state, orthogonal and out of this
+slice):
+
+```
+open < liquidTight < sealed        (default: liquidTight)
+```
+
+A holder retains matter when `closure ≥ requiredClosureFor(material)`.
+v1 bulk is all liquid (`requiredClosureFor → 'liquidTight'`), so an
+`open` vessel doesn't retain it — it **drains through** (below).
+`sealed` (gas) and the phase→required-level mapping are defined on the
+scale but unexercised until gas content lands.
+
+### `Container` + `Bulkable` — orthogonal slots
+
+Within one affordance, bulk and discrete contents are **independent**: a
+`Container` holds its `contents` (a `Set<Containable>`) and its interior
+slot, and neither touches the other. `CraftVessel`
+(`Crafted(Thermal(Bulkable(Container(Detailed(Thing)))))`) is the shipped
+case — the olive is a `Containable` in `contents`, the martini is the
+interior slot; `drink` drains the slot and the garnish stays. `Feeder`,
+`PlantPot` and `GardenBed` compose the same pair. There is no constraint
+to police (the inverse of `Stackable ⊥ Container`): a vessel that holds
+formless matter is the expected composer of both. Ice is NOT the discrete
+half — it is `ice` bulk moved from an ice bin, and its melt is a bulk
+credit on the same slot with the temperature clamped at the melting point
+([crafting.md § The glass pool](./crafting.md)). The slate's *a
+`Containable` becomes bulk* hook shipped for cast Things instead: a
+`Meltable` destructs into a molten floor pool and a vessel's liquid
+solidifies to a cast Thing ([thermal.md](./thermal.md)).
+
+## `BulkableApi.transfer` (`api/bulk.ts`)
+
+The one primitive — the bulk analog of `StackableApi.applyQuantity`
+(not of `split` / `merge`). It is **ungated** so controllers call it
+directly; the raw slot writes it composes are the low-level layer.
+Programmatic-contract violations throw; user-input failures ride the
+structured-notes envelope, reusing glob's canonical `@saxonberg/types`
+note kinds (`quantity-clamped`, `quantity-clamped-rejected`,
+`empty-result`, `target-declined`) — **no new note kinds**.
+
+```
+transfer(from: BulkSlot, to: BulkSlot | null, amount): TransferResult
+```
+
+`amount` is a `TransferAmount`: `{ kind: 'all' }` (the whole source,
+clamped to the destination's room — `drink` / `spill` / default `pour`)
+or `{ kind: 'measure'; litres; mode }` (a specific volume — `fill`-to-
+capacity, `sip`, `pour 2 cups`). Pipeline:
+
+1. **Empty / unresolved source** → `empty-result`, declined.
+2. **Material compatibility** — a non-empty destination must hold the
+   same material → `target-declined { reason: 'material-mismatch' }`,
+   declined. (Mixing is deferred.)
+3. **Closure** on an `interior` destination — if its closure can't
+   retain the matter, **drain through** to the floor's surface puddle
+   (one level of redirection, not recursive); status `'drained'`,
+   `drainedTo` set. Surface destinations always accept.
+4. **Clamp** `applied = min(requested, from.available(),
+   to.remaining())`. A measure shortfall: `strict` rejects entirely
+   (`quantity-clamped-rejected`); `lenient` moves what fits
+   (`quantity-clamped`, status `'partial'`).
+5. **Apply** — debit the source (skipped for an unbounded source; a
+   bounded slot that hits zero clears its material), credit the
+   destination (adopting the material when it was empty); a `null` sink
+   just discards. A fresh fill (empty destination) also carries the
+   **batch's identity** — a Graded source holder stamps the
+   destination's grade band, and a Crafted source stamps the maker's
+   mark (maker/recipe/craftedAt) too. The rule mirrors the payload
+   rule exactly: identity rides into an *empty* destination only; a
+   top-up keeps the destination's own identity (the fermentation grade
+   seam, D6).
+
+Verb-facing helpers on the same Api:
+
+- `slotFor(holder, affordance)` — resolve a holder's slot from
+  `model.field.via?.bulk?.affordance`.
+- `amountFromQuantity(quantity, fallback)` — translate an MQL measure
+  hint to litres (via the converters).
+- `floorSurfaceNear(near)` — walk the containment chain to the
+  location's floor surface slot (the `spill` target and the
+  drain-through destination).
+- `floorPuddleSummary(location)` — the room-view puddle line for
+  `LookController` (the floor is excluded from the contents list).
+- `ingest(actor, material, litres)` — hand consumed matter to the
+  actor's `ingest` seam.
+
+## Material identity (`lib/material/Material.ts`)
+
+`Material` composes `PerceptibleMixin` (a keyword pool) and carries an
+`appearance` phrase. It does **not** compose `Visible` / `Named` —
+substance identity stays out of the perception-target machinery, so
+material keywords never leak into room scope.
+
+- **keywords** drive material-keyword resolution (`drink coffee` finds
+  the holder).
+- **appearance** is the rendered phrase, composed two ways: the verbs
+  speak it (`You drink the dark, steaming coffee.`), and it rides a
+  holder's **description**.
+
+Demo Materials (`coffee`, `water`) are **flat** — appearance + keywords
+only, no composition / chemistry depth (fidelity is demand-driven;
+nothing in this slice reads past appearance + keywords).
+
+#### Why a Material is modelled at the granularity its interactions read
+
+`Material` carries real chemistry (formula, molar mass, `composition`
+weight-fractions, edibility/toxicity — [race.md](./race.md)); that depth
+is a **capacity, not a mandate**. The rule: **model a substance at the
+granularity its interactions actually read.** Coffee's interactions need
+a liquid, an appearance, a caffeine effect and *hot* — none reads a
+water-fraction — so coffee is a flat Material and the water in it is
+*presumed*; decompose into constituents only when some interaction has
+to see them, which for a drink is ~never. Two distinctions this fixes:
+**different substance vs. different phase** (bean → brewed coffee is two
+Materials related by a process, extraction; ice ↔ water is one Material
+in two phases — never conflate a chemical transformation with a phase
+change), and **capacity ≠ mandate** (the substrate's *ability* to model
+deep chemistry must never leak into *forced* fidelity). What keeps it
+honest is a three-layer stack: the **substrate** (materials, bulk,
+surfaces, `transfer`, effects — can go deep, defaults shallow); the
+**game**, a curated *legible* rule layer on top (oil pool + flame →
+spread; poison coats a blade; water conducts) that is **authored, not
+simulated** — emergence from a small learnable rule set, not from
+physics fidelity; and the **education dial**, the real chemistry an
+opt-in the teaching content turns up (Gus's coffee stays *coffee*; a
+chemistry lesson models the solution). The general principle is
+design-philosophy.md § The principle; the
+design DNA is MUD bones (the parser, rooms as stagecraft), NetHack's
+everything-interacts density got through **composition** rather than
+per-case code, and Larian's legible chemistry set — whose surfaces and
+clouds ARE this doc's surface-bulk / spill / coat / drain machinery, and
+the proof the substrate is fun when the rule layer on top stays legible.
+Source: `bulkable-slate` § Material fidelity · § Influences.
+
+### `getContentsDescriptionFor` — the contents augmenter
+
+How a bulk-bearing vessel names itself: **mechanism and presentation are
+separate layers.** The vessel + `Material` split is how the thing works
+(drink, pour, decant, deplete); the **short is authored per row** and
+never composed from them — *"a can of cola"*, *"a healing potion"*, *"a
+waterskin"* are literary choices, and *"a vial of X"* is never forced.
+The **long** is where the contents show: `bulkContentsAugmenter` (a
+`MarkupAugmenter` on every long-description path) appends one sentence
+per non-empty slot — *"It holds <contents>."* / *"A puddle of <contents>
+pools here."* — and an empty interior slot on a host with a vessel kind
+says *"The <kind> is empty."*, so a drained can stops reciting its
+authored row. The phrase is `host.getContentsDescriptionFor(viewer,
+affordance?)`, **per viewer**: an `Identifiable` material routes through
+`describeFor` (a stranger reads *"an iridescent crimson potion"*, a
+learner *"a veiling draught"* — [magic-items.md § Potions ride the
+MATERIAL](./magic-items.md)); otherwise the blend payload's `appearance`
+first (a mixed drink names itself, not its base material), then the
+material's own. It reads the payload, not `BlendIdentity`, because
+`lib/bulk` may not import `lib/craft`. Amount-aware phrasing (*a splash /
+a glass / a pool*) is not built — the slate's open tail.
+
+### `BulkPayload` — what a blend IS, and nothing else
+
+A **derived mixture** (a plated stew, a mixed cocktail) can't be a
+Material row without making the material library boundless (the
+fixed-vocabulary rule, [race.md](./race.md) § Material). So each slot
+optionally carries a **`BulkPayload`**, while the slot's material stays
+ONE generic substance (`/platform/idea/material/cooked`,
+`cocktail/mixed`). Cleared whenever the slot empties; `transfer` carries a
+copy into an empty destination. A payload-less slot behaves
+byte-identically to no payload at all.
+
+⭐⭐ **It carries only what cannot be derived.** It used to hold twelve
+fields — a Material row's whole identity and metabolism face — which is
+how a continuous-volume type came to name seven subsystems' vocabulary
+and why `lib/bulk` imported `lib/metabolism`. The bulk decomposition
+reduced it to facts nothing else can recover:
+
+| field | why it cannot derive | declared in |
+|---|---|---|
+| `composition` | **what went in** — Material PATHS + servings. Everything below reads this. | `lib/bulk` |
+| `recipeId` | which recipe made it. Not a property of the ingredients: the same inputs worked by a cook and a bartender are different makings. | `lib/bulk` |
+| `cookedAtK` | the temperature the working REACHED. The heat-labile toxin kill depends on it. | `lib/bulk` |
+| `appearance` | ⚠ a boundary: rendered by `bulkContentsAugmenter` in `lib/bulk`, which may not import `lib/craft` to ask the recipe. | `lib/bulk` |
+| `keywords` | ⚠ how the blend is FOUND. A missed lookup is not a degraded reading — it is an object that stopped existing. | `lib/bulk` |
+| `formedToxins` | toxins that AROSE (a spoiled batch's ptomaine). Nothing in the composition implies them. | `lib/metabolism` |
+| `freshness` | live state: microbial load + its clock stamp. | `lib/material/Freshness` |
+
+Everything else is **read**: the tastes and the tags (`BlendLabel` unions
+the ingredients'), the whole nutrition label (`BlendLabel`, shares scaled
+by servings — which is why the composition carries them), the name and
+the discipline (`BlendIdentity`, off the recipe, falling back to the
+Material).
+
+⭐ **The last two rows are the interesting part: a value object cannot
+compose a mixin, so the subsystems that own those facts declare their
+fields by DECLARATION MERGING from their own folders.** That is the
+payload-shaped equivalent of composing a mixin, and it is a technique the
+tree already used — `Engaged`, `CombatSession`, `AbortReason` and
+`Bulkable` itself (on the MQL types). It is why `lib/bulk` imports no
+subsystem but `lib/material`, and `pnpm lint:imports` holds that.
+
+
+## MQL surface
+
+A holder's bulk is a non-Stuff facet reached exactly like a `Detail`:
+the **holder** Stuff lands on the target field, and a `via.bulk` facet
+(declaration-merged onto `MqlMatchVia`, colocated in `Bulkable.ts`)
+marks "you reached this holder through its bulk":
+
+- **`:b` transform** (`thermos:b`) — keeps the holder, stamps
+  `via.bulk = { affordance: 'interior' }`; capability-gated (drops
+  non-holders), like `:i`. `:B` is unallocated (a bare `B` lowercases to
+  a `'b'` keyword filter → empty).
+- **material-keyword** (`drink coffee`) — `scope-walk.pushBulkMaterials`
+  emits one candidate per non-empty slot scored on the Material's
+  keywords, the holder as the matched Stuff, `via.bulk` set.
+- **`MqlQuantity` measure variant** — `value.kind: 'measure'` carries a
+  serializable `{ value, unit }` (the `Quantity.toJSON` shape, not a
+  live `Quantity`).
+- **`:{N unit}` formal** (`water:{2 cups}`) — `parseQuantity` reads a
+  unit bareword after the integer via `QuantityApi.resolveUnitToken`.
+- **natural-language measure** (`pour 2 cups water`) — a `desugar`
+  branch consumes `<int> <unit>` before the bare-count capture
+  (prep-split happens first in the matcher, so desugar only ever sees
+  the field's own text). The unit lexicon lives on `QuantityApi`
+  (`resolveUnitToken` / `isUnitToken`) — one home for both parser and
+  desugar, no free module.
+
+## The Floor (`obj/Floor.ts`)
+
+The floor composes `BulkableMixin` with a `surfaceBulk` slot, so a
+spilled, over-poured, or drained-through liquid pools as the floor's
+**surface** bulk (a puddle). The floor stays an `Adornment` fixture
+(excluded from the room's enumerated contents), **NOT** `Surfaced`:
+discrete containment is untouched — an apple dropped in the room is
+still `container = room`, a sibling of the desk, not `restingOn` the
+floor. A puddle is the floor's attribute, not a Stuff. The default-floor
+seed (`generic-objects/content/stuff/thing/surface/default-floor.yaml`) carries an uncapped
+surface slot, so any room with a floor can pool.
+
+## Verbs (`content/platform/cmd/bulk/`, `platform/idea/cmd/bulk/`)
+
+A `bulk/` command category — `fill` / `pour` / `spill` / `drink` /
+`sip` — each a thin direction over `transfer` (`void` + envelope, no
+`success` flags). The verbs are **carried by the holder** (the
+Thermometer-carries-`measure` pattern): `BulkableMixin` contributes them
+in the `inventory` / `peers` / `environment` buckets, so they light up
+whenever a Bulkable is reachable — not minted from a bespoke verb mixin.
+
+| Verb | Shape | Amount |
+|---|---|---|
+| `fill X from Y` | fill to capacity | measure = X's remaining headroom |
+| `pour X into Y` | holder → holder | the source measure hint, else all |
+| `spill X` | holder → floor surface | all |
+| `drink X` | holder → discard sink | all; fires `ingest` |
+| `sip X` | holder → discard sink | a fixed small measure; fires `ingest` |
+
+Four verbs joined the category later, each still a direction over
+`transfer`: **`eat X`** — the solid analog of `drink`, a discrete edible
+item handed to `ingest` as solid intake via `BulkableApi.ingestSolid`
+([metabolism.md](./metabolism.md)); **`water <plant> [with <source>]`** —
+`drink` with the plant's moisture reserve in place of `ingest`
+([husbandry.md](./husbandry.md)); **`feed <bed> [with <source>]`** —
+`water`'s twin, line for line, crediting compost to the ground's nitrogen
+reserve ([smallholding.md](./smallholding.md)); **`vomit`** — the
+voluntary purge of the digestion buffer's un-absorbed pools
+([metabolism.md](./metabolism.md)). `scoop` (surface → carried holder)
+was designed and is not built; none of the bulk verbs is durative.
+
+### The ingest seam (`lib/creature/Creature.ts`)
+
+`drink` / `sip` hand the consumed `{ material, amount }` to
+`Creature.ingest(material, amount)` (via `BulkableApi.ingest`). v1 is a
+deliberate **no-op** — the socket exists; nothing is plugged in. A
+future `Metabolic` / `Digestive` capability overrides it. Per-entity
+method, not a registry (substrate has no content hooks).
+
+⭐ **Plugged in since the metabolism build.** `MetabolicMixin` (composed
+on `Creature`) overrides `ingest(material, amount, phase, payload)`: it
+reconciles first, caps intake by the digestion buffer's liquid / solid
+sub-volume, returns the litres actually accepted (the `eat` verb consumes
+a discrete item only on full acceptance) and routes the material's tags
+to their handlers — [metabolism.md § The digestion
+buffer](./metabolism.md). Arcana's `PotableMixin` duck-types the same
+bridge, so a draught's effect fires on every ingestion route without bulk
+importing magic ([magic-items.md](./magic-items.md)). The seam's shape
+above held; only the no-op is history.
+
+The [respiration](./respiration.md) **air tank** (`obj/AirTank.ts`, a worn
+`Bulkable` whose `interior` is `air`) is another consumer of this surface:
+the body taps the tank with `BulkSlot.debit` as a depleting carried supply
+while submerged, and a depleted tank is refilled via `BulkableApi.transfer`
+from an air source — no new bulk machinery.
+
+## Demo content
+
+- Materials: `coffee`, `water` (`seeds/lib/material/bulk/`).
+- Holders: one `Receptacle` class (`obj/Receptacle.ts` =
+  `BulkableMixin(Thing)`, fluid-only — not a discrete `Container`, and
+  named to stay clear of the existing enterable-`Vessel`) backing four
+  rows (`generic-objects/content/stuff/thing/vessel/`): the unbounded coffee `urn`, the portable
+  `thermos`, the destination `mug`, and the `open`-closure `colander`.
+
+## Deferred tails
+
+Each lands in a named home later; none is in this slice.
+
+- **Mixing / solutions** — same-material accumulation only; cross-
+  material is rejected, not blended.
+- **The `sealed` / gas closure level** and the per-`Material` phase →
+  required-level mapping (gas → `sealed`, granular → `open`).
+- **The "everything is on a surface" containment inversion** — this
+  build adds surface-*bulk*, not the discrete-resting refactor.
+- **`Container` + `Bulkable`** (ice cube in water) — **shipped** as
+  `CraftVessel` (§ `Container` + `Bulkable` above); the demo vessels stay fluid-only.
+- **Universal auto-compose** into Containers / Surfaces.
+- **Amount-aware `appearance`**, capacity↔collision unification,
+  food-prep conversion verbs, thermal (hot coffee staying hot).
+- **Consumption consequences** — **shipped**: `MetabolicMixin.ingest`
+  ([metabolism.md](./metabolism.md)); see § The ingest seam.
+
+## File map
+
+| File | Role |
+|---|---|
+| `lib/bulk/Bulkable.ts` | mixin + `BulkSlot` + closure scale + `via.bulk` + `requiredClosureFor` + `getContentsDescriptionFor` |
+| `lib/bulk/UnboundedSource.ts` | `UnboundedSourceMixin` — inexhaustible-source override (urn) |
+| `obj/UnboundedReceptacle.ts` | the urn's class (`UnboundedSourceMixin(Receptacle)`) |
+| `api/bulk.ts` | `BulkableApi.transfer` + `slotFor` / `amountFromQuantity` / `floorSurfaceNear` / `floorPuddleSummary` / `ingest` |
+| `platform/idea/cmd/perception/LookController.ts` | room-view puddle line (the only non-bulk file the build touches) |
+| `lib/material/Material.ts` | `PerceptibleMixin` + `appearance` |
+| `lib/quantity.ts` | `mL` / `cup` units + converters |
+| `api/quantity.ts` | `resolveUnitToken` / `isUnitToken` |
+| `api/mql/{lexer,parser,resolver,desugar,scope-walk,types}.ts` | `:b`, material-keyword, `:{N unit}`, measure variant |
+| `obj/Floor.ts` | surface-bulk on the floor |
+| `content/platform/cmd/bulk/`, `platform/idea/cmd/bulk/` | the verb roster |
+| `lib/creature/Creature.ts` | the `ingest` seam |
+| `base-library/content/stuff/idea/material/bulk/`, `generic-objects/content/stuff/thing/vessel/` | demo content |
+
+## Cross-references
+
+- stacks.md — discrete sibling; reused notes + result-slot
+  patterns.
+- [quantities.md](./quantities.md) — `Quantity<U>`, unit catalog,
+  marshallers (volume units added here).
+- [race.md](./race.md) — `Material` (gains `PerceptibleMixin` +
+  `appearance`).
+- [mql.md](./mql.md) — `MqlMatchVia`, the `via.detailPath` precedent,
+  the `:b` transform home.
+- [response-envelope.md](./response-envelope.md) — note kinds.
+- bulkable-slate.md — design of record.
